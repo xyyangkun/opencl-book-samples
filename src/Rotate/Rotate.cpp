@@ -16,6 +16,7 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
+#include <assert.h>
 
 #ifdef __APPLE__
 #include <OpenCL/cl.h>
@@ -26,7 +27,15 @@
 ///
 //  Constants
 //
-const int ARRAY_SIZE = 1000;
+// const int ARRAY_SIZE = 1000;
+//const int ARRAY_SIZE = 100;
+//const int ARRAY_SIZE = 1920*1080*3/2;
+
+// 处理数据的格式为yuv
+// 这个程序使用opencl在1920x1080的(20, 20)位置上叠加一个720x576的数据
+const int w1 = 1920;
+const int h1 = 1080;
+const int BIG_SIZE = w1*h1*3/2;
 
 ///
 //  Create an OpenCL context on the first available platform using
@@ -177,17 +186,15 @@ cl_program CreateProgram(cl_context context, cl_device_id device, const char* fi
 //  The kernel takes three arguments: result (output), a (input),
 //  and b (input)
 //
-bool CreateMemObjects(cl_context context, cl_mem memObjects[3],
-                      float *a, float *b)
+bool CreateMemObjects(cl_context context, cl_mem memObjects[2],
+                      unsigned char *src1, unsigned char *dst)
 {
-    memObjects[0] = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
-                                   sizeof(float) * ARRAY_SIZE, a, NULL);
-    memObjects[1] = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
-                                   sizeof(float) * ARRAY_SIZE, b, NULL);
-    memObjects[2] = clCreateBuffer(context, CL_MEM_READ_WRITE,
-                                   sizeof(float) * ARRAY_SIZE, NULL, NULL);
+    memObjects[0] = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
+                                   sizeof(unsigned char) * BIG_SIZE, src1, NULL);
+    memObjects[1] = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
+                                   sizeof(unsigned char) * BIG_SIZE, dst, NULL);
 
-    if (memObjects[0] == NULL || memObjects[1] == NULL || memObjects[2] == NULL)
+    if (memObjects[0] == NULL || memObjects[1] == NULL)
     {
         std::cerr << "Error creating memory objects." << std::endl;
         return false;
@@ -200,9 +207,9 @@ bool CreateMemObjects(cl_context context, cl_mem memObjects[3],
 //  Cleanup any created OpenCL resources
 //
 void Cleanup(cl_context context, cl_command_queue commandQueue,
-             cl_program program, cl_kernel kernel, cl_mem memObjects[3])
+             cl_program program, cl_kernel kernel, cl_mem memObjects[2])
 {
-    for (int i = 0; i < 3; i++)
+    for (int i = 0; i < 2; i++)
     {
         if (memObjects[i] != 0)
             clReleaseMemObject(memObjects[i]);
@@ -226,12 +233,32 @@ void Cleanup(cl_context context, cl_command_queue commandQueue,
 //
 int main(int argc, char** argv)
 {
+	const char *in1 = "1080_nv12.yuv";
+	const char *out = "1080x1920_nv12_out.yuv";
+	if(argc == 3) {
+		in1 = argv[1];
+		out = argv[2];
+	}
+
+    FILE *in1_fp = fopen(in1 , "rb");
+    if(!in1_fp) {
+        printf("ERROR to open infile\n");
+        return -1;
+    }
+
+    FILE *out_fp = fopen(out , "wb");
+    if(!out_fp) {
+        printf("ERROR to open outfile\n");
+        return -1;
+    }
+
+
     cl_context context = 0;
     cl_command_queue commandQueue = 0;
     cl_program program = 0;
     cl_device_id device = 0;
     cl_kernel kernel = 0;
-    cl_mem memObjects[3] = { 0, 0, 0 };
+    cl_mem memObjects[2] = { 0, 0};
     cl_int errNum;
 
     // Create an OpenCL context on first available platform
@@ -252,18 +279,9 @@ int main(int argc, char** argv)
     }
 
     // Create OpenCL program from HelloWorld.cl kernel source
-    program = CreateProgram(context, device, "HelloWorld.cl");
+    program = CreateProgram(context, device, "Rotate.cl");
     if (program == NULL)
     {
-        Cleanup(context, commandQueue, program, kernel, memObjects);
-        return 1;
-    }
-
-    // Create OpenCL kernel
-    kernel = clCreateKernel(program, "hello_kernel", NULL);
-    if (kernel == NULL)
-    {
-        std::cerr << "Failed to create kernel" << std::endl;
         Cleanup(context, commandQueue, program, kernel, memObjects);
         return 1;
     }
@@ -271,37 +289,56 @@ int main(int argc, char** argv)
     // Create memory objects that will be used as arguments to
     // kernel.  First create host memory arrays that will be
     // used to store the arguments to the kernel
-    float result[ARRAY_SIZE];
-    float a[ARRAY_SIZE];
-    float b[ARRAY_SIZE];
-    for (int i = 0; i < ARRAY_SIZE; i++)
-    {
-        a[i] = (float)i;
-        b[i] = (float)(i * 2);
-    }
+    unsigned char *src = (unsigned char *)malloc(BIG_SIZE);
+    unsigned char *dst = (unsigned char *)malloc(BIG_SIZE);
+	assert(src != NULL);
+	assert(dst != NULL);
 
-    if (!CreateMemObjects(context, memObjects, a, b))
+	// 加载图片
+	fread(src, BIG_SIZE, 1, in1_fp);
+
+	printf("=================>after read img\n");
+
+    if (!CreateMemObjects(context, memObjects, src, dst))
     {
         Cleanup(context, commandQueue, program, kernel, memObjects);
         return 1;
     }
 
-    // Set the kernel arguments (result, a, b)
-    errNum = clSetKernelArg(kernel, 0, sizeof(cl_mem), &memObjects[0]);
-    errNum |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &memObjects[1]);
-    errNum |= clSetKernelArg(kernel, 2, sizeof(cl_mem), &memObjects[2]);
+	printf("=================>after  create objs\n");
+
+
+	{
+
+	// 合成Y
+    // Create OpenCL kernel
+    kernel = clCreateKernel(program, "rotate_y", NULL);
+    if (kernel == NULL)
+    {
+        std::cerr << "Failed to create kernel" << std::endl;
+        Cleanup(context, commandQueue, program, kernel, memObjects);
+        return 1; 
+	}
+
+    // Set the kernel arguments (w ,h ,....)
+    errNum  = clSetKernelArg(kernel, 0, sizeof(int), &w1);
+    errNum |= clSetKernelArg(kernel, 1, sizeof(int), &h1);
+    errNum |= clSetKernelArg(kernel, 2, sizeof(cl_mem), &memObjects[0]);
+    errNum |= clSetKernelArg(kernel, 3, sizeof(cl_mem), &memObjects[1]);
     if (errNum != CL_SUCCESS)
     {
         std::cerr << "Error setting kernel arguments." << std::endl;
         Cleanup(context, commandQueue, program, kernel, memObjects);
         return 1;
     }
+	printf("=================>after  set param\n");
 
-    size_t globalWorkSize[1] = { ARRAY_SIZE };
-    size_t localWorkSize[1] = { 1 };
+    size_t globalWorkSize[2] = { h1, w1};
+    size_t localWorkSize[2] = { 1, 1 };
+	size_t dim = 2;
 
     // Queue the kernel up for execution across the array
-    errNum = clEnqueueNDRangeKernel(commandQueue, kernel, 1, NULL,
+    errNum = clEnqueueNDRangeKernel(commandQueue, kernel, dim, NULL,
                                     globalWorkSize, localWorkSize,
                                     0, NULL, NULL);
     if (errNum != CL_SUCCESS)
@@ -311,25 +348,94 @@ int main(int argc, char** argv)
         return 1;
     }
 
+	printf("=================>after call cl\n");
+
+	clReleaseKernel(kernel);
+	}
+/////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////
+	//if(0)
+	{
+	// 合成UV
+    // Create OpenCL kernel
+    kernel = clCreateKernel(program, "rotate_uv", NULL);
+    if (kernel == NULL)
+    {
+        std::cerr << "Failed to create kernel" << std::endl;
+        Cleanup(context, commandQueue, program, kernel, memObjects);
+        return 1;
+    }
+	const int w11 = w1/2;
+	const int h11 = h1/2;
+    // Set the kernel arguments (w ,h ,....)
+    errNum  = clSetKernelArg(kernel, 0, sizeof(int), &w11);
+    errNum |= clSetKernelArg(kernel, 1, sizeof(int), &h11);
+    errNum |= clSetKernelArg(kernel, 2, sizeof(cl_mem), &memObjects[0]);
+    errNum |= clSetKernelArg(kernel, 3, sizeof(cl_mem), &memObjects[1]);
+    if (errNum != CL_SUCCESS)
+    {
+        std::cerr << "Error setting kernel arguments." << std::endl;
+        Cleanup(context, commandQueue, program, kernel, memObjects);
+        return 1;
+    }
+	printf("=================>after  set param\n");
+
+    // size_t globalWorkSize[2] = { ARRAY_SIZE/10,  ARRAY_SIZE/10};
+    size_t globalWorkSize[2] = { h11, w11};
+    size_t localWorkSize[2] = { 1, 1 };
+	size_t dim = 2;
+
+    // Queue the kernel up for execution across the array
+    errNum = clEnqueueNDRangeKernel(commandQueue, kernel, dim, NULL,
+                                    globalWorkSize, localWorkSize,
+                                    0, NULL, NULL);
+    if (errNum != CL_SUCCESS)
+    {
+        std::cerr << "Error queuing kernel for execution." << std::endl;
+        Cleanup(context, commandQueue, program, kernel, memObjects);
+        return 1;
+    }
+
+	printf("=================>after call cl\n");
+
+	}
+
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+
+
+
+
+#if 1
     // Read the output buffer back to the Host
-    errNum = clEnqueueReadBuffer(commandQueue, memObjects[2], CL_TRUE,
-                                 0, ARRAY_SIZE * sizeof(float), result,
+    errNum = clEnqueueReadBuffer(commandQueue, memObjects[1], CL_TRUE,
+                                 0, BIG_SIZE* sizeof(unsigned char), dst,
                                  0, NULL, NULL);
     if (errNum != CL_SUCCESS)
     {
         std::cerr << "Error reading result buffer." << std::endl;
         Cleanup(context, commandQueue, program, kernel, memObjects);
-        return 1;
+        //return 1;
+		goto out;
     }
+#endif
 
-    // Output the result buffer
-    for (int i = 0; i < ARRAY_SIZE; i++)
-    {
-        std::cout << result[i] << " ";
-    }
+	printf("=================>after get buf\n");
+	// 写入数据
+	fwrite(dst, BIG_SIZE, 1, out_fp);
+
     std::cout << std::endl;
     std::cout << "Executed program succesfully." << std::endl;
     Cleanup(context, commandQueue, program, kernel, memObjects);
+
+out:
+	free(src);
+	free(dst);
+	fclose(in1_fp);
+	fclose(out_fp);
 
     return 0;
 }
