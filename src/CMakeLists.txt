@@ -7,7 +7,9 @@ SUBDIRS(Chapter_2/HelloWorld
 	Chapter_12/VectorAdd
 	Chapter_14/histogram 
 	Chapter_16/Dijkstra
-	Chapter_22/)	
+	Chapter_22/
+	Blend
+	Rotate)	
 
 IF(WIN32 OR UNIX AND NOT APPLE)
 	# Sinewave uses wgl or glx
