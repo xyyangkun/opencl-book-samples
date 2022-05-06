@@ -15,7 +15,7 @@ __kernel void blend_y(
 	//printf("w=%d, h=%d\n", w, h);
 	//printf("%d == %d\n", (h+y)*w1 + x + w, h*w2 + w);
 
-	if(( (h+y)*w1 + x + w <= 1920*1080) && (h*w2 + w <= 720*576 ))
+	if(( (h+y)*w1 + x + w <= 1920*1080) && (h*w2 + w <= 1280*720 ))
 		src1[(h+y)*w1 + x + w] = src2 [ h*w2 + w];
 	else 
 		printf("error !!!  h=%d y = %d w1=%d  w=%d w2=%d  %d %d\n",
@@ -38,8 +38,8 @@ __kernel void blend_uv(
     int h = get_global_id(0);
     int w = get_global_id(1);
 
-	src1[2073600 + (h + y / 2 ) * w1 + x + 2*w    ] = src2 [414720 +  h*w2 + 2*w];
-	src1[2073600 + (h + y / 2 ) * w1 + x + 2*w + 1] = src2 [414720 +  h*w2 + 2*w + 1];
+	src1[2073600 + (h + y / 2 ) * w1 + x + 2*w    ] = src2 [w2*h2 +  h*w2 + 2*w];
+	src1[2073600 + (h + y / 2 ) * w1 + x + 2*w + 1] = src2 [w2*h2 +  h*w2 + 2*w + 1];
 }
 
 

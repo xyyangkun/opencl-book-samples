@@ -17,6 +17,7 @@
 #include <fstream>
 #include <sstream>
 #include <assert.h>
+#include <sys/time.h>
 
 #ifdef __APPLE__
 #include <OpenCL/cl.h>
@@ -35,12 +36,14 @@
 // 这个程序使用opencl在1920x1080的(20, 20)位置上叠加一个720x576的数据
 const int w1 = 1920;
 const int h1 = 1080;
-const int w2 = 720;
-const int h2 = 576;
+const int w2 = 1280;
+const int h2 = 720;
 const int x = 20;
 const int y = 20;
 const int BIG_SIZE = w1*h1*3/2;
 const int LIT_SIZE = w2*h2*3/2;
+
+static struct timeval t_new, t_old;
 
 ///
 //  Create an OpenCL context on the first available platform using
@@ -239,7 +242,8 @@ void Cleanup(cl_context context, cl_command_queue commandQueue,
 int main(int argc, char** argv)
 {
 	const char *in1 = "1080_nv12.yuv";
-	const char *in2 = "d1_nv12.yuv";
+	// const char *in2 = "d1_nv12.yuv";
+	const char *in2 = "720p_nv12.yuv";
 	const char *out = "1920x1080_nv12_out.yuv";
 	if(argc == 3) {
 		in1 = argv[1];
@@ -405,6 +409,7 @@ int main(int argc, char** argv)
 
     // size_t globalWorkSize[2] = { ARRAY_SIZE/10,  ARRAY_SIZE/10};
     size_t globalWorkSize[2] = { h2/2, w2/2};
+    // size_t localWorkSize[2] = { 1, 1 };
     size_t localWorkSize[2] = { 1, 1 };
 	size_t dim = 2;
 
@@ -424,6 +429,10 @@ int main(int argc, char** argv)
 	}
 
 
+	gettimeofday(&t_old, 0);
+	clFinish(commandQueue);
+	gettimeofday(&t_new, 0);
+	printf("=====>%s:%d\n","wait cl finish time:", (t_new.tv_sec-t_old.tv_sec)*1000000 + (t_new.tv_usec - t_old.tv_usec));
 
 
 ///////////////////////////////////////////////////////////////////////////////
