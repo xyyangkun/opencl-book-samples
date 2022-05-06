@@ -9,7 +9,8 @@ SUBDIRS(Chapter_2/HelloWorld
 	Chapter_16/Dijkstra
 	Chapter_22/
 	Blend
-	Rotate)	
+	Rotate
+	Rotate_1088)	
 
 IF(WIN32 OR UNIX AND NOT APPLE)
 	# Sinewave uses wgl or glx
