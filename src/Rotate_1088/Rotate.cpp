@@ -35,6 +35,7 @@
 // 这个程序使用opencl在1920x1080的(20, 20)位置上叠加一个720x576的数据
 const int w1 = 1920;
 const int h1 = 1080;
+const int BIG_SIZE0 = 1920*1088*3/2;
 const int BIG_SIZE = w1*h1*3/2;
 
 ///
@@ -190,7 +191,7 @@ bool CreateMemObjects(cl_context context, cl_mem memObjects[2],
                       unsigned char *src1, unsigned char *dst)
 {
     memObjects[0] = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
-                                   sizeof(unsigned char) * BIG_SIZE, src1, NULL);
+                                   sizeof(unsigned char) * BIG_SIZE0, src1, NULL);
     memObjects[1] = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
                                    sizeof(unsigned char) * BIG_SIZE, dst, NULL);
 
@@ -233,7 +234,7 @@ void Cleanup(cl_context context, cl_command_queue commandQueue,
 //
 int main(int argc, char** argv)
 {
-	const char *in1 = "1080_nv12.yuv";
+	const char *in1 = "1920x1088_nv12.yuv";
 	const char *out = "1080x1920_nv12_out.yuv";
 	if(argc == 3) {
 		in1 = argv[1];
@@ -289,13 +290,13 @@ int main(int argc, char** argv)
     // Create memory objects that will be used as arguments to
     // kernel.  First create host memory arrays that will be
     // used to store the arguments to the kernel
-    unsigned char *src = (unsigned char *)malloc(BIG_SIZE);
+    unsigned char *src = (unsigned char *)malloc(BIG_SIZE0);
     unsigned char *dst = (unsigned char *)malloc(BIG_SIZE);
 	assert(src != NULL);
 	assert(dst != NULL);
 
 	// 加载图片
-	fread(src, BIG_SIZE, 1, in1_fp);
+	fread(src, BIG_SIZE0, 1, in1_fp);
 
 	printf("=================>after read img\n");
 
